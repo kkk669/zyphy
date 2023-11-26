@@ -22,6 +22,7 @@
 @freestanding(codeItem) private macro go(error: ParseError..., createAttr: Character, to: State) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 @freestanding(codeItem) private macro go(error: ParseError..., appendAttrName: Character) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 @freestanding(codeItem) private macro go(error: ParseError..., appendAttrValue: Character) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
+@freestanding(codeItem) private macro go(error: ParseError..., appendAttrValue: String) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 @freestanding(codeItem) private macro go(error: ParseError..., emitTag: State) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 @freestanding(codeItem) private macro go(error: ParseError..., emitSelfClosingTag: State) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 @freestanding(codeItem) private macro go(error: ParseError..., createDOCTYPE: Character, to: State) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
@@ -38,7 +39,7 @@
 @freestanding(codeItem) private macro goEmitDOCTYPEAndEOF() = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 @freestanding(codeItem) private macro goEmitForceQuirksDOCTYPEAndEOF() = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 @freestanding(codeItem) private macro goEmitNewForceQuirksDOCTYPEAndEOF() = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
-@freestanding(codeItem) private macro goConsumeCharRef() = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
+@freestanding(codeItem) private macro goConsumeCharRef(inAttr: Bool) = #externalMacro(module: "TokenizerMacros", type: "GoMacro")
 
 public struct Tokenizer<Sink: TokenSink>: ~Copyable {
     public var sink: Sink
@@ -92,7 +93,7 @@ public struct Tokenizer<Sink: TokenSink>: ~Copyable {
         switch self.state {
         case .data: while true {
             switch self.getChar(from: &input) {
-            case "&": #goConsumeCharRef
+            case "&": #goConsumeCharRef(inAttr: false)
             case "<": #go(to: .tagOpen)
             case "\0": #go(error: .unexpectedNull, emit: "\0")
             case nil: #go(emit: .eof)
@@ -101,7 +102,7 @@ public struct Tokenizer<Sink: TokenSink>: ~Copyable {
         }
         case .rcdata: while true {
             switch self.getChar(from: &input) {
-            case "&": #goConsumeCharRef
+            case "&": #goConsumeCharRef(inAttr: false)
             case "<": #go(to: .rcdataLessThanSign)
             case "\0": #go(error: .unexpectedNull, emit: "\u{FFFD}")
             case nil: #go(emit: .eof)
@@ -506,7 +507,7 @@ public struct Tokenizer<Sink: TokenSink>: ~Copyable {
         case .attributeValueDoubleQuoted: while true {
             switch self.getChar(from: &input) {
             case "\"": #go(to: .afterAttributeValueQuoted)
-            case "&": #goConsumeCharRef
+            case "&": #goConsumeCharRef(inAttr: true)
             case "\0": #go(error: .unexpectedNull, appendAttrValue: "\u{FFFD}")
             case nil: #go(error: .eofInTag, emit: .eof)
             case let c?: #go(appendAttrValue: c)
@@ -515,7 +516,7 @@ public struct Tokenizer<Sink: TokenSink>: ~Copyable {
         case .attributeValueSingleQuoted: while true {
             switch self.getChar(from: &input) {
             case "'": #go(to: .afterAttributeValueQuoted)
-            case "&": #goConsumeCharRef
+            case "&": #goConsumeCharRef(inAttr: true)
             case "\0": #go(error: .unexpectedNull, appendAttrValue: "\u{FFFD}")
             case nil: #go(error: .eofInTag, emit: .eof)
             case let c?: #go(appendAttrValue: c)
@@ -524,7 +525,7 @@ public struct Tokenizer<Sink: TokenSink>: ~Copyable {
         case .attributeValueUnquoted: while true {
             switch self.getChar(from: &input) {
             case "\t", "\n", "\u{0C}", " ": #go(to: .beforeAttributeName)
-            case "&": #goConsumeCharRef
+            case "&": #goConsumeCharRef(inAttr: true)
             case ">": #go(emitTag: .data)
             case "\0": #go(error: .unexpectedNull, appendAttrValue: "\u{FFFD}")
             case nil: #go(error: .eofInTag, emit: .eof)
@@ -892,6 +893,17 @@ public struct Tokenizer<Sink: TokenSink>: ~Copyable {
         }
     }
 
+    @_disfavoredOverload
+    @inline(__always)
+    mutating func processCharRef(_ s: consuming String) {
+        switch self.state {
+        case .data, .rcdata: for c in consume s { #go(emit: c) }
+        case .attributeValueDoubleQuoted, .attributeValueSingleQuoted, .attributeValueUnquoted:
+            #go(appendAttrValue: consume s)
+        case _: preconditionFailure("unreachable")
+        }
+    }
+
     @inline(__always)
     private mutating func getChar(from input: inout String.Iterator) -> Character? {
         guard let reconsumeChar else {
@@ -1149,8 +1161,8 @@ public struct Tokenizer<Sink: TokenSink>: ~Copyable {
     }
 
     @inline(__always)
-    private mutating func consumeCharRef() {
-        self.charRefTokenizer = .init()
+    private mutating func consumeCharRef(inAttr isInAttr: Bool) {
+        self.charRefTokenizer = .init(inAttr: isInAttr)
     }
 }
 
