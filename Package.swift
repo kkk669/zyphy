@@ -32,6 +32,9 @@ let package = Package(
                 .unsafeFlags(["-Xfrontend", "-warn-long-expression-type-checking=100"], .when(configuration: .debug)),
                 .unsafeFlags(["-swift-version", "6"]),
                 .enableExperimentalFeature("CodeItemMacros"),
+            ],
+            plugins: [
+                "TokenizerBuildToolPlugin"
             ]
         ),
         .macro(
@@ -45,6 +48,17 @@ let package = Package(
                 .unsafeFlags(["-Xfrontend", "-warn-long-expression-type-checking=100"], .when(configuration: .debug)),
                 .unsafeFlags(["-swift-version", "6"]),
             ]
+        ),
+        .executableTarget(
+            name: "TokenizerBuildTool",
+            dependencies: [
+                "HTMLEntities"
+            ]
+        ),
+        .plugin(
+            name: "TokenizerBuildToolPlugin",
+            capability: .buildTool(),
+            dependencies: ["TokenizerBuildTool"]
         ),
         .target(
             name: "HTMLEntities",
