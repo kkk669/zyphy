@@ -9,6 +9,11 @@ public struct BufferQueue: ~Copyable, Sendable {
         self.buffers = [buf]
     }
 
+    mutating func prepend(_ buf: Str) {
+        guard !buf.isEmpty else { return }
+        self.buffers.prepend(StrSlice(buf))
+    }
+
     mutating func prepend(_ buf: StrSlice) {
         guard !buf.isEmpty else { return }
         self.buffers.prepend(buf)
